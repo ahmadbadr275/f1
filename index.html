@@ -13,8 +13,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
-<script>
 
+<script>
 // === Scene Setup ===
 let scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
@@ -34,7 +34,7 @@ directional.position.set(20,40,20);
 directional.castShadow = true;
 scene.add(directional);
 
-// === Ground ===
+// Ground
 let groundGeometry = new THREE.PlaneGeometry(500,500);
 let groundMaterial = new THREE.MeshStandardMaterial({color:0x228B22});
 let ground = new THREE.Mesh(groundGeometry, groundMaterial);
@@ -42,57 +42,35 @@ ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// === Track ===
-let track = new THREE.Group();
+// Track (simple straight)
+let trackGeometry = new THREE.BoxGeometry(5,0.2,200);
+let trackMaterial = new THREE.MeshStandardMaterial({color:0x333333});
+let track = new THREE.Mesh(trackGeometry, trackMaterial);
+track.position.z = 100;
+track.receiveShadow = true;
 scene.add(track);
 
-// Create straight track segment
-function createTrackSegment(x, z, length, width, angle=0){
-    let geom = new THREE.BoxGeometry(width,0.2,length);
-    let mat = new THREE.MeshStandardMaterial({color:0x333333});
-    let seg = new THREE.Mesh(geom,mat);
-    seg.position.set(x,0.1,z);
-    seg.rotation.y = angle;
-    seg.receiveShadow = true;
-    seg.castShadow = true;
-    track.add(seg);
-}
-
-// Simple oval track
-for(let i=0;i<20;i++){
-    createTrackSegment(0,i*10,10,5);            // straight
-    createTrackSegment(10,i*10 + 10,10,5, Math.PI/6); // curve
-    createTrackSegment(-10,i*10 + 20,10,5, -Math.PI/6); // curve
-}
-
-// Track boundaries
-function createBarrier(x,z,width,height,length){
-    let geom = new THREE.BoxGeometry(width,height,length);
-    let mat = new THREE.MeshStandardMaterial({color:0x555555});
-    let barrier = new THREE.Mesh(geom,mat);
-    barrier.position.set(x,height/2,z);
-    barrier.castShadow = true;
-    scene.add(barrier);
-}
-// Add barriers along sides of track
-for(let i=0;i<200;i+=10){
-    createBarrier(3, i, 0.5,1,10);  // right side
-    createBarrier(-3,i,0.5,1,10);   // left side
-}
-
-// === Car ===
-let carGeometry = new THREE.BoxGeometry(1,0.5,2);
-let carMaterial = new THREE.MeshStandardMaterial({color:0xff0000});
-let car = new THREE.Mesh(carGeometry, carMaterial);
-car.position.y = 0.25;
-car.castShadow = true;
-scene.add(car);
+// === Load F1 Car Model ===
+let loader = new THREE.GLTFLoader();
+let car;
+loader.load(
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/Ferrari.glb', // example free car GLB
+  function(gltf){
+    car = gltf.scene;
+    car.scale.set(0.01,0.01,0.01); // adjust scale for this model
+    car.position.set(0,0.05,0);
+    car.rotation.y = Math.PI; // face forward
+    scene.add(car);
+  },
+  undefined,
+  function(error){ console.error(error); }
+);
 
 // Camera start
 camera.position.set(0,5,10);
-camera.lookAt(car.position);
+camera.lookAt(0,0,0);
 
-// === Controls & Physics ===
+// Controls
 let speed = 0;
 let turn = 0;
 const maxSpeed = 0.8;
@@ -100,48 +78,45 @@ const acceleration = 0.03;
 const turnSpeed = 0.04;
 
 let keys = {};
-document.addEventListener('keydown', (e)=>{ keys[e.key] = true; });
-document.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
+document.addEventListener('keydown',(e)=>{ keys[e.key]=true; });
+document.addEventListener('keyup',(e)=>{ keys[e.key]=false; });
 
-// === Laps / HUD ===
 let lap = 1;
 
-// === Animate Loop ===
+// Animate loop
 function animate(){
     requestAnimationFrame(animate);
+    if(car){
+        // Movement
+        if(keys['ArrowUp']||keys['w']) speed+=acceleration;
+        else if(keys['ArrowDown']||keys['s']) speed-=acceleration;
+        else speed*=0.95;
+        if(speed>maxSpeed) speed=maxSpeed;
+        if(speed<-maxSpeed) speed=-maxSpeed;
 
-    // Acceleration / friction
-    if(keys['ArrowUp'] || keys['w']) speed += acceleration;
-    else if(keys['ArrowDown'] || keys['s']) speed -= acceleration;
-    else speed *= 0.95;
+        if(keys['ArrowLeft']||keys['a']) turn = turnSpeed;
+        else if(keys['ArrowRight']||keys['d']) turn = -turnSpeed;
+        else turn=0;
 
-    if(speed>maxSpeed) speed = maxSpeed;
-    if(speed<-maxSpeed) speed = -maxSpeed;
+        car.rotation.y += turn*speed*5;
+        car.position.x -= Math.sin(car.rotation.y)*speed;
+        car.position.z -= Math.cos(car.rotation.y)*speed;
 
-    // Turning
-    if(keys['ArrowLeft'] || keys['a']) turn = turnSpeed;
-    else if(keys['ArrowRight'] || keys['d']) turn = -turnSpeed;
-    else turn = 0;
+        if(car.position.z>200){ lap++; car.position.z=0; }
 
-    car.rotation.y += turn*speed*5;
-    car.position.x -= Math.sin(car.rotation.y)*speed;
-    car.position.z -= Math.cos(car.rotation.y)*speed;
+        // Camera follow
+        camera.position.lerp(new THREE.Vector3(
+            car.position.x + Math.sin(car.rotation.y)*10,
+            car.position.y + 5,
+            car.position.z + Math.cos(car.rotation.y)*10
+        ),0.1);
+        camera.lookAt(car.position);
 
-    // Simple lap detection (cross z>200)
-    if(car.position.z>200) { lap++; car.position.z = 0; }
+        // HUD
+        document.getElementById('hud').innerText = `Speed: ${Math.abs(speed*100).toFixed(0)} km/h | Lap: ${lap}`;
+    }
 
-    // Camera follow
-    camera.position.lerp(new THREE.Vector3(
-        car.position.x + Math.sin(car.rotation.y)*10,
-        car.position.y + 5,
-        car.position.z + Math.cos(car.rotation.y)*10
-    ), 0.1);
-    camera.lookAt(car.position);
-
-    // Update HUD
-    document.getElementById('hud').innerText = `Speed: ${Math.abs(speed*100).toFixed(0)} km/h | Lap: ${lap}`;
-
-    renderer.render(scene, camera);
+    renderer.render(scene,camera);
 }
 animate();
 
@@ -149,7 +124,7 @@ animate();
 window.addEventListener('resize',()=>{
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(window.innerWidth,window.innerHeight);
 });
 </script>
 </body>
