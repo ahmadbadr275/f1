@@ -13,14 +13,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 <script>
+
 // === Scene Setup ===
 let scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // sky blue
+scene.background = new THREE.Color(0x87ceeb);
 
 let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-
 let renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -31,38 +30,54 @@ let ambient = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambient);
 
 let directional = new THREE.DirectionalLight(0xffffff, 1);
-directional.position.set(10, 20, 10);
+directional.position.set(20,40,20);
 directional.castShadow = true;
 scene.add(directional);
 
-// === Ground & Track ===
-let groundGeometry = new THREE.PlaneGeometry(300, 300);
-let groundMaterial = new THREE.MeshStandardMaterial({color:0x228B22}); // green grass
+// === Ground ===
+let groundGeometry = new THREE.PlaneGeometry(500,500);
+let groundMaterial = new THREE.MeshStandardMaterial({color:0x228B22});
 let ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Track layout (curved + straight sections)
+// === Track ===
 let track = new THREE.Group();
 scene.add(track);
 
-function createTrackSegment(x, z, length, width, angle=0) {
-    let geom = new THREE.BoxGeometry(width, 0.2, length);
+// Create straight track segment
+function createTrackSegment(x, z, length, width, angle=0){
+    let geom = new THREE.BoxGeometry(width,0.2,length);
     let mat = new THREE.MeshStandardMaterial({color:0x333333});
-    let seg = new THREE.Mesh(geom, mat);
-    seg.position.set(x, 0.1, z);
+    let seg = new THREE.Mesh(geom,mat);
+    seg.position.set(x,0.1,z);
     seg.rotation.y = angle;
-    seg.castShadow = true;
     seg.receiveShadow = true;
+    seg.castShadow = true;
     track.add(seg);
 }
 
-// Create simple oval track
-for(let i=0;i<10;i++){
-    createTrackSegment(0, i*10, 10, 5);            // straight
-    createTrackSegment(10, i*10 + 10, 10, 5, Math.PI/4); // curve
-    createTrackSegment(-10, i*10 + 20, 10, 5, -Math.PI/4); // curve
+// Simple oval track
+for(let i=0;i<20;i++){
+    createTrackSegment(0,i*10,10,5);            // straight
+    createTrackSegment(10,i*10 + 10,10,5, Math.PI/6); // curve
+    createTrackSegment(-10,i*10 + 20,10,5, -Math.PI/6); // curve
+}
+
+// Track boundaries
+function createBarrier(x,z,width,height,length){
+    let geom = new THREE.BoxGeometry(width,height,length);
+    let mat = new THREE.MeshStandardMaterial({color:0x555555});
+    let barrier = new THREE.Mesh(geom,mat);
+    barrier.position.set(x,height/2,z);
+    barrier.castShadow = true;
+    scene.add(barrier);
+}
+// Add barriers along sides of track
+for(let i=0;i<200;i+=10){
+    createBarrier(3, i, 0.5,1,10);  // right side
+    createBarrier(-3,i,0.5,1,10);   // left side
 }
 
 // === Car ===
@@ -73,7 +88,7 @@ car.position.y = 0.25;
 car.castShadow = true;
 scene.add(car);
 
-// Camera initial position
+// Camera start
 camera.position.set(0,5,10);
 camera.lookAt(car.position);
 
@@ -88,43 +103,50 @@ let keys = {};
 document.addEventListener('keydown', (e)=>{ keys[e.key] = true; });
 document.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
 
-// === Animate Loop ===
+// === Laps / HUD ===
 let lap = 1;
+
+// === Animate Loop ===
 function animate(){
     requestAnimationFrame(animate);
 
-    // Acceleration / deceleration
+    // Acceleration / friction
     if(keys['ArrowUp'] || keys['w']) speed += acceleration;
     else if(keys['ArrowDown'] || keys['s']) speed -= acceleration;
-    else speed *= 0.95; // friction
+    else speed *= 0.95;
 
-    if(speed > maxSpeed) speed = maxSpeed;
-    if(speed < -maxSpeed) speed = -maxSpeed;
+    if(speed>maxSpeed) speed = maxSpeed;
+    if(speed<-maxSpeed) speed = -maxSpeed;
 
     // Turning
     if(keys['ArrowLeft'] || keys['a']) turn = turnSpeed;
     else if(keys['ArrowRight'] || keys['d']) turn = -turnSpeed;
     else turn = 0;
 
-    car.rotation.y += turn * speed * 5;
-    car.position.x -= Math.sin(car.rotation.y) * speed;
-    car.position.z -= Math.cos(car.rotation.y) * speed;
+    car.rotation.y += turn*speed*5;
+    car.position.x -= Math.sin(car.rotation.y)*speed;
+    car.position.z -= Math.cos(car.rotation.y)*speed;
+
+    // Simple lap detection (cross z>200)
+    if(car.position.z>200) { lap++; car.position.z = 0; }
 
     // Camera follow
-    camera.position.x = car.position.x + Math.sin(car.rotation.y) * 10;
-    camera.position.z = car.position.z + Math.cos(car.rotation.y) * 10;
-    camera.position.y = car.position.y + 5;
+    camera.position.lerp(new THREE.Vector3(
+        car.position.x + Math.sin(car.rotation.y)*10,
+        car.position.y + 5,
+        car.position.z + Math.cos(car.rotation.y)*10
+    ), 0.1);
     camera.lookAt(car.position);
 
-    // HUD
+    // Update HUD
     document.getElementById('hud').innerText = `Speed: ${Math.abs(speed*100).toFixed(0)} km/h | Lap: ${lap}`;
 
     renderer.render(scene, camera);
 }
 animate();
 
-// Handle window resize
-window.addEventListener('resize', ()=>{
+// Handle resize
+window.addEventListener('resize',()=>{
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
