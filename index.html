@@ -4,63 +4,96 @@
 <meta charset="UTF-8">
 <title>3D F1 Racing Game</title>
 <style>
-  body { margin:0; overflow:hidden; background:#111; font-family:sans-serif; }
+  body { margin:0; overflow:hidden; background:#87ceeb; font-family:sans-serif; }
   #hud { position:absolute; top:10px; left:10px; color:white; font-size:18px; z-index:1; }
 </style>
 </head>
 <body>
 <div id="hud">Speed: 0 km/h | Lap: 1</div>
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 <script>
+// === Scene Setup ===
 let scene = new THREE.Scene();
-scene.background = new THREE.Color(0x202020);
+scene.background = new THREE.Color(0x87ceeb); // sky blue
 
 let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
 let renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 // Lights
-let light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(10,10,10);
-scene.add(light);
-scene.add(new THREE.AmbientLight(0x404040));
+let ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
 
-// Track (plane)
-let trackGeometry = new THREE.PlaneGeometry(200, 50);
-let trackMaterial = new THREE.MeshStandardMaterial({color:0x333333});
-let track = new THREE.Mesh(trackGeometry, trackMaterial);
-track.rotation.x = -Math.PI/2;
+let directional = new THREE.DirectionalLight(0xffffff, 1);
+directional.position.set(10, 20, 10);
+directional.castShadow = true;
+scene.add(directional);
+
+// === Ground & Track ===
+let groundGeometry = new THREE.PlaneGeometry(300, 300);
+let groundMaterial = new THREE.MeshStandardMaterial({color:0x228B22}); // green grass
+let ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Track layout (curved + straight sections)
+let track = new THREE.Group();
 scene.add(track);
 
-// Car (placeholder cube)
+function createTrackSegment(x, z, length, width, angle=0) {
+    let geom = new THREE.BoxGeometry(width, 0.2, length);
+    let mat = new THREE.MeshStandardMaterial({color:0x333333});
+    let seg = new THREE.Mesh(geom, mat);
+    seg.position.set(x, 0.1, z);
+    seg.rotation.y = angle;
+    seg.castShadow = true;
+    seg.receiveShadow = true;
+    track.add(seg);
+}
+
+// Create simple oval track
+for(let i=0;i<10;i++){
+    createTrackSegment(0, i*10, 10, 5);            // straight
+    createTrackSegment(10, i*10 + 10, 10, 5, Math.PI/4); // curve
+    createTrackSegment(-10, i*10 + 20, 10, 5, -Math.PI/4); // curve
+}
+
+// === Car ===
 let carGeometry = new THREE.BoxGeometry(1,0.5,2);
 let carMaterial = new THREE.MeshStandardMaterial({color:0xff0000});
 let car = new THREE.Mesh(carGeometry, carMaterial);
 car.position.y = 0.25;
+car.castShadow = true;
 scene.add(car);
 
-// Camera start
+// Camera initial position
 camera.position.set(0,5,10);
 camera.lookAt(car.position);
 
-// Controls
+// === Controls & Physics ===
 let speed = 0;
 let turn = 0;
-const maxSpeed = 0.5;
-const acceleration = 0.02;
-const turnSpeed = 0.03;
+const maxSpeed = 0.8;
+const acceleration = 0.03;
+const turnSpeed = 0.04;
 
 let keys = {};
 document.addEventListener('keydown', (e)=>{ keys[e.key] = true; });
 document.addEventListener('keyup', (e)=>{ keys[e.key] = false; });
 
-// Game loop
+// === Animate Loop ===
+let lap = 1;
 function animate(){
     requestAnimationFrame(animate);
 
-    // Forward/back
+    // Acceleration / deceleration
     if(keys['ArrowUp'] || keys['w']) speed += acceleration;
     else if(keys['ArrowDown'] || keys['s']) speed -= acceleration;
     else speed *= 0.95; // friction
@@ -68,12 +101,12 @@ function animate(){
     if(speed > maxSpeed) speed = maxSpeed;
     if(speed < -maxSpeed) speed = -maxSpeed;
 
-    // Left/right
+    // Turning
     if(keys['ArrowLeft'] || keys['a']) turn = turnSpeed;
     else if(keys['ArrowRight'] || keys['d']) turn = -turnSpeed;
     else turn = 0;
 
-    car.rotation.y += turn * speed * 5; // rotate car based on speed
+    car.rotation.y += turn * speed * 5;
     car.position.x -= Math.sin(car.rotation.y) * speed;
     car.position.z -= Math.cos(car.rotation.y) * speed;
 
@@ -84,7 +117,7 @@ function animate(){
     camera.lookAt(car.position);
 
     // HUD
-    document.getElementById('hud').innerText = `Speed: ${Math.abs(speed*100).toFixed(0)} km/h | Lap: 1`;
+    document.getElementById('hud').innerText = `Speed: ${Math.abs(speed*100).toFixed(0)} km/h | Lap: ${lap}`;
 
     renderer.render(scene, camera);
 }
