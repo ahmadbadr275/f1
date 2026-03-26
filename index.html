@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D F1 Game</title>
+<style>
+  body { margin:0; overflow:hidden; background:#111; }
+  #hud { position:absolute; top:10px; left:10px; color:white; font-family:sans-serif; }
+</style>
+</head>
+<body>
+<div id="hud">Speed: 0 km/h</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lights
+let light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,10,10);
+scene.add(light);
+
+// Track plane
+let trackGeometry = new THREE.PlaneGeometry(100,100,1,1);
+let trackMaterial = new THREE.MeshStandardMaterial({color:0x333333});
+let track = new THREE.Mesh(trackGeometry, trackMaterial);
+track.rotation.x = -Math.PI/2;
+scene.add(track);
+
+// Load car model
+let loader = new THREE.GLTFLoader();
+let car;
+loader.load('models/car.glb', function(gltf){
+    car = gltf.scene;
+    car.scale.set(0.5,0.5,0.5);
+    car.position.set(0,0.25,0);
+    scene.add(car);
+});
+
+// Camera
+camera.position.set(0,5,10);
+camera.lookAt(0,0,0);
+
+// Car controls
+let speed = 0;
+document.addEventListener('keydown', (e)=>{
+    if(e.key==='ArrowUp') speed +=0.1;
+    if(e.key==='ArrowDown') speed -=0.1;
+});
+document.addEventListener('keyup', ()=>{ speed=0; });
+
+// Animate loop
+function animate(){
+    requestAnimationFrame(animate);
+    if(car){
+        car.position.z -= speed;
+        camera.position.z = car.position.z + 10;
+        camera.position.x = car.position.x;
+        camera.lookAt(car.position);
+        document.getElementById('hud').innerText = 'Speed: ' + Math.abs(speed*100).toFixed(0) + ' km/h';
+    }
+    renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
